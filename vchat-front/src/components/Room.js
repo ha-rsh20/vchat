@@ -6,34 +6,61 @@ import peer from "../service/peer";
 function Room(props) {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState();
-  const [myStream, setMyStream] = useState();
-  const [remoteStream, setRemoteStream] = useState();
-  const [video, setVideo] = useState(true);
-  const [voice, setVoice] = useState(true);
+  let [myStream, setMyStream] = useState(null);
+  let [remoteStream, setRemoteStream] = useState(null);
+  let [audio, setAudio] = useState(1);
+  let [video, setVideo] = useState(1);
+  const [roomid, setRoomId] = useState(localStorage.getItem("roomid"));
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`email:${email} joined room`);
     setRemoteSocketId(id);
   }, []);
 
-  const handldeCallUser = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: video,
-      video: voice,
-    });
+  const createStream = async () => {
+    const stream = await navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+        video: true,
+      })
+      .then((stream) => {
+        setMyStream(stream);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  };
+
+  const handleCallUser = useCallback(async () => {
+    const stream = await navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+        video: true,
+      })
+      .then((stream) => {
+        setMyStream(stream);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
-    setMyStream(stream);
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
     async ({ from, offer }) => {
       setRemoteSocketId(from);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: video,
-        video: voice,
-      });
-      setMyStream(stream);
+      const stream = await navigator.mediaDevices
+        .getUserMedia({
+          audio: true,
+          video: true,
+        })
+        .then((stream) => {
+          setMyStream(stream);
+        })
+        .catch((err) => {
+          console.log(err);
+        });
       console.log(`incomming call from`, from, offer);
       const ans = await peer.getAnswer(offer);
       socket.emit("call:accepted", { to: from, ans });
@@ -73,6 +100,31 @@ function Room(props) {
     await peer.setLocalDescription(ans);
   }, []);
 
+  const handleUserDisconnected = useCallback(() => {
+    setMyStream(null);
+    setRemoteStream(null);
+    console.log(myStream + " " + remoteStream);
+    setRemoteSocketId(null);
+  }, []);
+
+  const handleUserCall = useCallback(({ type }) => {
+    if (type === "audio") {
+      audio = 1 - audio;
+      if (audio == 1) {
+        createStream();
+      } else if (audio == 0) {
+        myStream.getAudioTracks()[0].stop();
+      }
+    } else {
+      video = 1 - video;
+      if (video == 1) {
+        createStream();
+      } else if (video == 0) {
+        myStream.getVideoTracks()[0].stop();
+      }
+    }
+  }, []);
+
   useEffect(() => {
     peer.peer.addEventListener("negotiationneeded", handleNegoNeeded);
     return () => {
@@ -93,6 +145,7 @@ function Room(props) {
     socket.on("call:accepted", handleCallAccepted);
     socket.on("peer:nego:needed", handleNegoNeedIncomming);
     socket.on("peer:nego:final", handleNegoNeedfinal);
+    socket.on("user:disconnected", handleUserDisconnected);
 
     return () => {
       socket.off("user:joined", handleUserJoined);
@@ -100,6 +153,7 @@ function Room(props) {
       socket.off("call:accepted", handleCallAccepted);
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedfinal);
+      socket.off("user:disconnected", handleUserDisconnected);
     };
   }, [
     socket,
@@ -108,14 +162,16 @@ function Room(props) {
     handleCallAccepted,
     handleNegoNeedIncomming,
     handleNegoNeedfinal,
+    handleUserDisconnected,
   ]);
 
   return (
     <div>
       <h1>Room</h1>
       <h4>{remoteSocketId ? "connected" : "no in the room"}</h4>
+      <h4>{roomid}</h4>
       {remoteSocketId && <button onClick={sendStreams}>send stream</button>}
-      {remoteSocketId && <button onClick={handldeCallUser}>call</button>}
+      {remoteSocketId && <button onClick={handleCallUser}>call</button>}
       {myStream && (
         <>
           <h4>My Stream</h4>
@@ -127,19 +183,17 @@ function Room(props) {
           />
           <button
             onClick={() => {
-              console.log("pause video");
-              setVideo(false);
+              myStream.getVideoTracks()[0].stop();
             }}
           >
             video
           </button>
           <button
             onClick={() => {
-              console.log("pause audio");
-              setVoice(false);
+              myStream.getAudioTracks()[0].stop();
             }}
           >
-            mute
+            audio
           </button>
         </>
       )}

@@ -16,6 +16,9 @@ io.on("connection", (socket) => {
     io.to(roomid).emit("user:joined", { email, id: socket.id });
     socket.join(roomid);
     io.to(socket.id).emit("room:join", data);
+    socket.on("disconnect", () => {
+      io.to(roomid).emit("user:disconnected");
+    });
   });
 
   socket.on("room:create", (data) => {
@@ -27,6 +30,9 @@ io.on("connection", (socket) => {
     io.to(roomid).emit("user:joined", { email, id: socket.id });
     socket.join(roomid);
     io.to(socket.id).emit("room:join", { email, roomid });
+    socket.on("disconnect", () => {
+      io.to(roomid).emit("user:disconnected");
+    });
   });
 
   socket.on("user:call", ({ to, offer }) => {

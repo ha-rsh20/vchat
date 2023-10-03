@@ -29,8 +29,10 @@ function Lobby(props) {
 
   const handleRoomJoin = useCallback(
     (data) => {
+      
       const { email, roomid } = data;
       console.log(roomid);
+      localStorage.setItem("roomid", roomid);
       navigate(`/room/${roomid}`);
     },
     [navigate]
